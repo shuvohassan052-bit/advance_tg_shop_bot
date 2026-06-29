@@ -79,6 +79,9 @@ PREMIUM_DEFAULTS: dict[str, tuple[str, str]] = {
     "money": ("5424972470023104089", "💰"),
 }
 
+# Logical names that admins can attach a premium custom-emoji ID to, in-bot.
+PREMIUM_KEYS: list[str] = ["crown", "fire", "gem", "rocket", "check", "money", "star", "gift"]
+
 # Runtime overrides loaded from DB settings (logical name -> custom_emoji_id)
 _premium_overrides: dict[str, str] = {}
 
@@ -87,6 +90,28 @@ def set_premium_overrides(overrides: dict[str, str]) -> None:
     """Replace the in-memory premium emoji ID overrides (called on startup / settings save)."""
     global _premium_overrides
     _premium_overrides = {k: v for k, v in (overrides or {}).items() if v}
+
+
+def get_premium_overrides() -> dict[str, str]:
+    """Return a copy of the current in-memory premium emoji ID overrides."""
+    return dict(_premium_overrides)
+
+
+def set_one_override(name: str, emoji_id: str | None) -> None:
+    """Set or clear a single premium emoji override in memory."""
+    if emoji_id:
+        _premium_overrides[name] = emoji_id
+    else:
+        _premium_overrides.pop(name, None)
+
+
+def effective_emoji_id(name: str) -> str | None:
+    """Return the custom emoji ID that will currently be used for a logical name."""
+    if name in _premium_overrides:
+        return _premium_overrides[name]
+    if name in PREMIUM_DEFAULTS:
+        return PREMIUM_DEFAULTS[name][0]
+    return None
 
 
 def premium(name: str) -> str:

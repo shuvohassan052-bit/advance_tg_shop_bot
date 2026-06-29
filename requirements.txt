@@ -1,5 +1,4 @@
 aiogram>=3.20,<4
-aiosqlite>=0.20
 python-dotenv>=1.0
 motor>=3.6
 pymongo>=4.8

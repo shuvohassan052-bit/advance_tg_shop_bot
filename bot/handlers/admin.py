@@ -12,10 +12,19 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
 from .. import config, db
-from ..emojis import e, premium
+from ..emojis import (
+    PREMIUM_KEYS,
+    e,
+    effective_emoji_id,
+    get_premium_overrides,
+    premium,
+    set_one_override,
+    set_premium_overrides,
+)
 from ..keyboards import (
     admin_back_kb,
     admin_cats_kb,
+    admin_emojis_kb,
     admin_home_kb,
     admin_order_kb,
     admin_prod_view_kb,
@@ -687,6 +696,59 @@ async def cb_settings(call: CallbackQuery, state: FSMContext) -> None:
     await call.answer()
 
 
+# ---------------- Premium / Custom Emoji manager ----------------
+async def render_emoji_manager(call: CallbackQuery) -> None:
+    current = get_premium_overrides()
+    lines = [
+        f"{premium('stars')} <b>Premium Emoji Manager</b>\n",
+        "Attach a Telegram <b>custom (premium) emoji</b> to each accent used "
+        "across the bot. The chosen emoji renders for everyone, with a safe "
+        "unicode fallback.\n",
+        f"{e('info')} Tap a name, then simply <b>send that premium emoji</b> "
+        "(or paste its numeric ID). Send <code>-</code> to clear it.\n",
+    ]
+    for k in PREMIUM_KEYS:
+        eid = effective_emoji_id(k)
+        status = f"<code>{eid}</code>" if eid else "default"
+        lines.append(f"{premium(k)} <b>{k}</b> — {status}")
+    await safe_edit(call.message, "\n".join(lines),
+                    admin_emojis_kb(PREMIUM_KEYS, current))
+
+
+@router.callback_query(F.data == "admin:emojis")
+async def cb_emojis(call: CallbackQuery, state: FSMContext) -> None:
+    await state.clear()
+    await render_emoji_manager(call)
+    await call.answer()
+
+
+@router.callback_query(F.data == "admin:emoji:reset")
+async def cb_emoji_reset(call: CallbackQuery, state: FSMContext) -> None:
+    await db.update_setting("custom_emojis", {})
+    set_premium_overrides({})
+    await call.answer("All custom emojis reset to defaults.")
+    await render_emoji_manager(call)
+
+
+@router.callback_query(F.data.startswith("admin:emoji:set:"))
+async def cb_emoji_set(call: CallbackQuery, state: FSMContext) -> None:
+    key = call.data.split(":", 3)[3]
+    if key not in PREMIUM_KEYS:
+        await call.answer()
+        return
+    await state.set_state(AdminSetting.value)
+    await state.update_data(setting=f"emoji:{key}")
+    await safe_edit(
+        call.message,
+        f"{e('stars')} Set premium emoji for <b>{key}</b>.\n\n"
+        f"{e('down')} <b>Send the premium emoji</b> directly, or paste its numeric "
+        f"<code>custom_emoji_id</code>.\n"
+        f"{e('info')} Send <code>-</code> to clear and use the default.",
+        cancel_kb("admin:emojis"),
+    )
+    await call.answer()
+
+
 @router.callback_query(F.data == "admin:set:toggle_shop")
 async def cb_toggle_shop(call: CallbackQuery, state: FSMContext) -> None:
     s = await db.get_settings()
@@ -714,7 +776,37 @@ async def cb_set_field(call: CallbackQuery, state: FSMContext) -> None:
 async def setting_value(message: Message, state: FSMContext) -> None:
     data = await state.get_data()
     key = data.get("setting")
-    raw = message.text.strip()
+    raw = (message.text or "").strip()
+
+    # Special case: setting a premium/custom emoji ID for a logical accent name
+    if key and key.startswith("emoji:"):
+        name = key.split(":", 1)[1]
+        emoji_id: str | None = None
+        # Prefer extracting the custom_emoji_id from a sent premium emoji
+        for ent in (message.entities or []):
+            if ent.type == "custom_emoji" and ent.custom_emoji_id:
+                emoji_id = ent.custom_emoji_id
+                break
+        if emoji_id is None:
+            if raw in ("-", "off", "none", "default", ""):
+                emoji_id = None
+            elif raw.isdigit():
+                emoji_id = raw
+            else:
+                await message.answer(
+                    f"{e('warning')} Send a premium emoji, a numeric ID, or "
+                    f"<code>-</code> to clear."
+                )
+                return
+        set_one_override(name, emoji_id)
+        await db.update_setting("custom_emojis", get_premium_overrides())
+        await state.clear()
+        shown = f"<code>{emoji_id}</code>" if emoji_id else "default"
+        await message.answer(
+            f"{premium('check')} Premium emoji for <b>{name}</b> set to {shown}.\n"
+            f"Preview: {premium(name)}"
+        )
+        return
 
     # Special case: editing a product price from product view
     if key == "product_price":

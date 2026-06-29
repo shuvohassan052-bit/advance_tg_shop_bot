@@ -212,9 +212,23 @@ def admin_settings_kb() -> InlineKeyboardMarkup:
     b.button(text=f"{e('star')} Stars / Unit", callback_data="admin:set:stars_per_unit")
     b.button(text=f"{e('gift')} Referral Reward", callback_data="admin:set:referral_reward")
     b.button(text=f"{e('bell')} Force-Join Channel", callback_data="admin:set:force_join_channel")
+    b.button(text=f"{e('stars')} Premium Emojis", callback_data="admin:emojis")
     b.button(text=f"{e('lock')} Toggle Shop Open", callback_data="admin:set:toggle_shop")
     b.button(text=f"{e('admin')} Admin Home", callback_data="admin:home")
-    b.adjust(2, 1, 2, 1, 1, 1, 1)
+    b.adjust(2, 1, 2, 1, 1, 1, 1, 1)
+    return b.as_markup()
+
+
+def admin_emojis_kb(keys: list[str], current: dict[str, str]) -> InlineKeyboardMarkup:
+    """Manager for premium/custom emoji ID overrides — one button per logical name."""
+    b = InlineKeyboardBuilder()
+    for k in keys:
+        mark = e("check") if current.get(k) else e("pencil")
+        b.button(text=f"{mark} {k}", callback_data=f"admin:emoji:set:{k}")
+    b.button(text=f"{e('trash')} Reset All", callback_data="admin:emoji:reset")
+    b.button(text=f"{e('settings')} Settings", callback_data="admin:settings")
+    b.button(text=f"{e('admin')} Admin Home", callback_data="admin:home")
+    b.adjust(2, 2, 2, 2, 1, 1)
     return b.as_markup()
 
 
